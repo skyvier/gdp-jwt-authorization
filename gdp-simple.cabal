@@ -60,6 +60,7 @@ library
     -- Modules exported by the library.
     exposed-modules:  Settings 
                     , App
+                    , App.Delete
                     , Validation.SignedWith
                     , Authorization.HasRole
 
@@ -80,6 +81,12 @@ library
                     , containers
                     , aeson
                     , text
+                    , bytestring
+                    , servant
+                    , servant-client
+                    , http-client
+                    , http-client-tls
+
 
     -- Directories containing source files.
     hs-source-dirs:   src

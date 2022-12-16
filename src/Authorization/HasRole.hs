@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Authorization.HasRole (Role(..), RoleError, HasRole, hasRole, withRole) where
 
@@ -20,9 +21,8 @@ import Data.Proxy
 import qualified Data.Map as M
 
 import Control.Lens hiding ((...))
-import Control.Monad (guard)
-import Control.Monad.Trans.Maybe
-import Control.Monad.Error.Class hiding (Error)
+import Control.Monad.IO.Class
+import Control.Exception
 
 import GDP
 
@@ -38,36 +38,37 @@ newtype Role = Role { unRole :: String }
 data HasRole (jwtRole :: Symbol) claims
 
 data RoleError = DoesNotHaveRole
-  deriving (Show, Eq)
+  deriving stock (Show, Eq)
+  deriving anyclass (Exception)
 
 withRole
-  :: forall roleName claims r m. (KnownSymbol roleName, Monad m, MonadError RoleError m)
+  :: forall roleName claims r m. (KnownSymbol roleName, Monad m, MonadIO m)
   => (ClaimsSet ~~ claims ::: SignedBy "azure" claims)
   -> ((ClaimsSet ~~ claims ::: HasRole roleName claims) -> m r)
   -> m r
 withRole x callback = do
-  mProof <- hasRole @roleName x
+  let mProof = hasRole @roleName x
   case mProof of
-    Nothing -> throwError DoesNotHaveRole
+    Nothing -> liftIO $ throwIO DoesNotHaveRole
     Just proof -> callback (exorcise x...proof)
 
 hasRole
-  :: forall roleName claims m. (KnownSymbol roleName, Monad m)
+  :: forall roleName claims. KnownSymbol roleName
   => (ClaimsSet ~~ claims ::: SignedBy "azure" claims)
-  -> m (Maybe (Proof (HasRole roleName claims)))
-hasRole c = runMaybeT $ do
+  -> Maybe (Proof (HasRole roleName claims))
+hasRole c =
   let necessaryRole = Role $ symbolVal $ Proxy @roleName
-  roles <- MaybeT $ getRoles $ the c
-  guard $ necessaryRole `elem` roles
-  return axiom
+      mRoles = getRoles $ the c
+      hasNecessaryRole = maybe False (elem necessaryRole) mRoles
+  in if hasNecessaryRole then Just axiom else Nothing
 
-getRoles :: Monad m => ClaimsSet -> m (Maybe [Role])
+getRoles :: ClaimsSet -> Maybe [Role]
 getRoles claims =
   let extraClaims = view unregisteredClaims claims
   in case M.lookup "roles" extraClaims of
-    Nothing -> return Nothing
+    Nothing -> Nothing
     Just roles ->
       let result :: Result [Role] = fromJSON roles
       in case result of
-        Error _ -> return Nothing
-        Success parsedResults -> return $ Just parsedResults
+        Error _ -> Nothing
+        Success parsedResults -> Just parsedResults
