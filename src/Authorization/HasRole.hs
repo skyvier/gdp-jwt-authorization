@@ -14,8 +14,6 @@
 
 module Authorization.HasRole (Role(..), RoleError, HasRole, hasRole, withRole) where
 
-import Validation.SignedWith
-
 import Data.Aeson
 import Data.Proxy
 import qualified Data.Map as M
@@ -35,7 +33,7 @@ newtype Role = Role { unRole :: String }
   deriving stock (Eq, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
 
-data HasRole (jwtRole :: Symbol) claims
+data HasRole claims (jwtRole :: Symbol)
 
 data RoleError = DoesNotHaveRole
   deriving stock (Show, Eq)
@@ -43,19 +41,19 @@ data RoleError = DoesNotHaveRole
 
 withRole
   :: forall roleName claims r m. (KnownSymbol roleName, Monad m, MonadIO m)
-  => (ClaimsSet ~~ claims ::: SignedBy "azure" claims)
-  -> ((ClaimsSet ~~ claims ::: HasRole roleName claims) -> m r)
+  => (ClaimsSet ~~ claims)
+  -> (Proof (claims `HasRole` roleName) -> m r)
   -> m r
 withRole x callback = do
   let mProof = hasRole @roleName x
   case mProof of
     Nothing -> liftIO $ throwIO DoesNotHaveRole
-    Just proof -> callback (exorcise x...proof)
+    Just proof -> callback proof
 
 hasRole
   :: forall roleName claims. KnownSymbol roleName
-  => (ClaimsSet ~~ claims ::: SignedBy "azure" claims)
-  -> Maybe (Proof (HasRole roleName claims))
+  => (ClaimsSet ~~ claims)
+  -> Maybe (Proof (claims `HasRole` roleName))
 hasRole c =
   let necessaryRole = Role $ symbolVal $ Proxy @roleName
       mRoles = getRoles $ the c

@@ -1,5 +1,4 @@
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 module App where
@@ -8,7 +7,9 @@ import App.Delete
 
 import Settings
 
+import Data.Aeson (encode)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Base64 as B64
 import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as T
 import Data.Proxy
@@ -37,10 +38,26 @@ interactiveTest = do
 getTestSettings :: IO Settings
 getTestSettings = do
   azureSettings <- getAzureSettings
+  awsSettings <- getAwsSettings
   return $ Settings
     { azureJwtSettings = azureSettings
-    , orthancJwtSettings = undefined
+    , awsJwtSettings = awsSettings
     }
+
+getAwsSettings :: IO JWTSettings
+getAwsSettings = do
+  let audiencePred = const True
+      encodedOctetsBS = T.encodeUtf8 hardcodedOctectsBase64
+  hardcodedJwk <- case B64.decode encodedOctetsBS of
+    Left _ -> fail "invalid key"
+    Right decodedOctets -> pure (fromOctets decodedOctets)
+  let jwkSet = JWKSet [hardcodedJwk]
+  print $ encode jwkSet
+  return $ JWTSettings (defaultJWTValidationSettings audiencePred) jwkSet
+
+  where
+    hardcodedOctectsBase64 =
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 getAzureSettings :: IO JWTSettings
 getAzureSettings =
@@ -69,4 +86,3 @@ decodeJWT jwtBs = do
   where
     decode :: BS.ByteString -> IO (Either JWTError SignedJWT)
     decode bs = runExceptT $ decodeCompact bs
-

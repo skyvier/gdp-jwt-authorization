@@ -63,6 +63,9 @@ library
                     , App.Delete
                     , Validation.SignedWith
                     , Authorization.HasRole
+                    , Authorization.HasClaim
+                    , Authorization.Delete
+                    , Authorization.Delete.Axioms
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -86,6 +89,7 @@ library
                     , servant-client
                     , http-client
                     , http-client-tls
+                    , base64-bytestring
 
 
     -- Directories containing source files.
