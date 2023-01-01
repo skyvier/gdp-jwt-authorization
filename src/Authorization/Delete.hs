@@ -50,7 +50,7 @@ canDeleteApplicationAzure token = runMaybeT $ do
   claims <- MaybeT $ getClaimsOf @"azure" token
   let proofOfSignature = conjure claims
   proofOfRole <-
-    MaybeT $ pure $ hasRole @"Orthanc.Plan.Delete" (exorcise claims)
+    MaybeT $ pure $ hasRole @"administrator" (exorcise claims)
   return $ buildProofAzure proofOfSignature proofOfRole
 
 canDeleteApplicationAws
@@ -68,7 +68,7 @@ canDeleteApplicationAws token = runMaybeT $ do
 
 buildProofAzure
   :: Proof (token `SignedBy` "azure")
-  -> Proof ((ClaimsOf token) `HasRole` "Orthanc.Plan.Delete" )
+  -> Proof ((ClaimsOf token) `HasRole` "administrator" )
   -> Proof (CanDeleteApplication token)
 buildProofAzure proofOfSignature proofOfRole =
   (proofOfSignature `introAnd` proofOfRole) `elimImpl` Axiom.azure

@@ -90,6 +90,15 @@ function that can only be run if the user
 * is an administrator according to AWS?
 * is an administrator according to either Azure or AWS?
 
+### This repository 
+
+The code in this repository is a working PoC of the techniques described 
+in the rest of this document.
+
+It implements a program that allows a user to "delete an application" if the
+JWT provided by the user tells that the user is an administrator according to
+Azure or AWS.
+
 ### Naive solution 
 
 In the naive solution, you would write primitive functions for checking
@@ -381,9 +390,197 @@ results in some pretty elegant code (in my humble opinion).
 
 #### Overview
 
-> :warning: **The following section assumes familiarity with the GDP library**
+> :warning: **The following section assumes some familiarity with the GDP library**
+
+The features provided by the `gdp` library make it easy to 
+
+1. name objects (values and functions)
+2. create proofs about named objects
+3. attach proofs to values
+
+GDP makes it easy to translate a statement like 
+
+> This specific JWT token is signed by Azure
+
+to a type level signature such as 
+
+``` haskell
+SignedJWT ~~ token ::: (token `SignedBy` "azure")
+```
+
+which can be read as follows:
+
+> SignedJWT named token such that token is signed by Azure
+
+Line by line, the type signature can interpreter like this:
+
+``` haskell
+SignedJWT                     -- SignedJWT
+  ~~                          -- "named"
+  token                       -- token
+  :::                         -- "such that"
+  (token `SignedBy` "azure")  -- token is signed by Azure
+```
+
+Proofs can be easily detached/attached with named values.
+
+```
+(...)    :: a -> Proof p -> a ::: p
+conjure  :: (a ::: p) -> Proof p 
+exorcise :: (a ::: p) -> a
+```
+
+##### How are the proofs created?
+
+A function within a module can check whether or not a JWT is signed by Azure.
+If the token is signed by Azure, the function returns a proof about that 
+statement.
+
+``` haskell
+module Validation.SignedWith (SignedBy, isSignedBy) where
+
+data SignedBy token (signedName :: Symbol)
+
+isSignedBy 
+  :: forall signerName token. KnownSymbol signerName
+  => SignedJWT ~~ token 
+  -> Maybe (Proof (token `SignedBy` signerName))
+isSignedBy = undefined
+```
+
+It's also possible to extract the claims of a `SignedJWT` and maintain a
+connection between the `SignedJWT` and its `ClaimsSet` at the type level:
+
+``` haskell 
+module Validation.SignedWith (ClaimsOf, getClaimsOf) where
+
+newtype ClaimsOf token = ClaimsOf Defn
+
+getClaimsOf
+  :: forall signerName token. KnownSymbol signerName
+  => SignedJWT ~~ token 
+  -> Maybe (ClaimsSet ~~ ClaimsOf token)
+getClaimsOf = undefined
+```
+
+The function `isSignedBy` is the only available method of creating a value of 
+type ``Proof (token `SignedBy` signerName)`` for the clients of this package.
 
 
+The function `getClaimsOf` is the only available way to acquire a `ClaimsSet`
+attached to a specific JWT via the `ClaimsOf token` name.
+
+
+As long as the functions themselves have been implemented correctly and tested 
+extensively, you can always trust that the proofs describe reality. 
+
+
+Proofs can also be generated from other proofs via axioms. The following axiom
+(`azureAdmin`) states that 
+
+> If you can prove that the token is signed by Azure **and** that the claims 
+> of the token have a role called "administrator", you have proved that the
+> token describes an administrator according to Azure.
+
+``` haskell
+data IsAzureAdministrator token
+
+azureAdmin ::
+  Proof (
+    (token `SignedBy` "azure" && (ClaimsOf token) `HasRole` "administrator")
+    -->
+    (IsAdministrator token)
+  )
+azureAdmin = axiom
+```
+
+Essentially, you can generate a `Proof (IsAdministrator token)` from two other
+proofs
+
+``` haskell 
+buildProofAzureAdmin
+  :: Proof (token `SignedBy` "azure")
+  -> Proof ((ClaimsOf token) `HasRole` "administrator" )
+  -> Proof (IsAzureAdministrator token)
+buildProofAzureAdmin proofOfSignature proofOfRole =
+  (proofOfSignature `introAnd` proofOfRole) `elimImpl` azureAdmin
+```
+
+##### How can the proofs be used?
+
+You can then use the proofs in the type signatures of other function to limit
+the domain of a function.
+
+For example, you could write a function that only accepts JWTs signed by Azure:
+
+``` haskell 
+getAzureClaims
+  :: forall token. SignedJWT ~~ token ::: (token `SignedBy` "azure")
+  -> ClaimsSet ~~ ClaimsOf token ::: (token `SignedBy` "azure")
+getAzureClaims = undefined
+```
+
+Or you could write a function that can only be run if you can prove that a JWT 
+describes an administrator according to Azure. Rewriting an example from the
+naive implementation:
+
+``` haskell
+-- | Allowed only for users that are administrators according to Azure.
+fireMissiles 
+  :: Proof (IsAzureAdministrator token)
+  -- ^ Tells whether or not the user is an administrator according to Azure
+  -> IO ()
+fireMissiles _ = boom
+```
+
+The domain of the function is now restricted in such a way that you are only 
+able to run it if you are able to provide a proof that the token is authorized
+to fire missiles (since it describes an administrator user).
+
+It is now impossible to run `fireMissiles` without providing a proof of 
+authorization. The compiler just doesn't let you do that.
+
+##### Have the issues of the naive solution been solved?
+
+Yes. The original issues were:
+
+1. Unsafety
+   - It's way too easy to forget to perform an authorization check when one 
+     is needed
+2. Redundancy
+   - In complex tasks, one could easily end up performing the authorization 
+     check multiple times (see the previous code block) even though it's
+     already clear the the user has the necessary authorization
+3. Boolean blindness 
+   - The results of `isAuthorized` functions are bare `Bool`s which tell
+     nothing about the meaning of the bit
+4. Disconnect between a token, the claims of the token and the authorization
+   provided by the token (from the compilers point of view)
+   - The `SignedJWT` received from the user is in no way connected to the 
+     `ClaimsSet` that is extracted from it 
+   - Neither the `SignedJWT` nor the `ClaimsSet` are in any way connected to
+     the authorization result carried inside the token (`Bool`)
+
+How they were fixed?
+
+1. Unsafety 
+   - It's no longer possible to perform a protected function without providing 
+     proof of authorization (as long as the domain of the protected function is 
+     restricted).
+2. Redundancy 
+   - Proof of authorization can be obtained once and reused as many times as 
+     needed.
+   - Proofs from previous checks can be used to construct new proofs via axioms
+3. Boolean blindness 
+   - We're no longer dealing with boolean. We're dealing with clearly named 
+     proofs of statements.
+4. Disconnect between a token, the claims of the token and the authorization
+   provided by the token (from the compilers point of view)
+   - Every token has a unique name (`SignedJWT ~~ token`)
+   - The claims of a token have a name that is attached to the name of the token 
+     they were extracted from (`ClaimsSet ~~ ClaimsOf token`)
+   - Proofs of authorization are also attached to the name of the token 
+     - `IsAzureAdministrator token`
 
 ## What about servant-auth?
 

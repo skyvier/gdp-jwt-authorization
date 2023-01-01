@@ -39,7 +39,7 @@ deleteApplicationAzure
 deleteApplicationAzure jwt =
   name jwt $ \namedJwt ->
     withClaimsSignedBy @"azure" namedJwt $ \(namedClaims, proofOfSignature) ->
-      withRole @"Orthanc.Plan.Delete" namedClaims $ \proofOfRole ->
+      withRole @"administrator" namedClaims $ \proofOfRole ->
         let proof = buildProofAzure proofOfSignature proofOfRole
         in deleteApplicationSafe proof
 
