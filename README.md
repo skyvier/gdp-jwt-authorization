@@ -1,16 +1,16 @@
 # gdp-jwt-authorization
 
-What is this all about?
+What is this repository all about?
 
-> Using Ghosts of Departed Proofs (GDP) to have the compiler enforce
+> This is a PoC of using Ghosts of Departed Proofs (GDP) to have the compiler enforce
 authorization checks for us
 
 Authorization is an extremely business critical process. Getting it right is 
 vital for the continuity of a business.
 
 Nowadays, authorization claims are often carried in the claim set of a JWT.
-The JWT is often issued by an identity provider via an OAuth 2.0 authorization
-flow. Therefore, I chose to focus on JWTs.
+The JWT is often issued by an identity provider and acquired via an OAuth 2.0 
+authorization flow. Therefore, I chose to focus on JWTs in this PoC.
 
 This repository explores how to bring the authorization claims from the term
 level to the type level so that GHC can enforce authorization checks for
