@@ -439,7 +439,7 @@ statement.
 ``` haskell
 module Validation.SignedWith (SignedBy, isSignedBy) where
 
-data SignedBy token (signedName :: Symbol)
+data SignedBy token (signerName :: Symbol)
 
 isSignedBy 
   :: forall signerName token. KnownSymbol signerName
@@ -508,8 +508,8 @@ buildProofAzureAdmin proofOfSignature proofOfRole =
 
 ##### How can the proofs be used?
 
-You can then use the proofs in the type signatures of other function to limit
-the domain of a function.
+You can then use proofs in the type signatures of other functions to limit
+the domains of the functions.
 
 For example, you could write a function that only accepts JWTs signed by Azure:
 
@@ -531,6 +531,13 @@ fireMissiles
   -- ^ Tells whether or not the user is an administrator according to Azure
   -> IO ()
 fireMissiles _ = boom
+
+handler :: SignedJWT -> IO ()
+handler token = name token $ \namedToken -> do 
+  let mAdministratorProof = isAdministrator namedToken
+  case mAdministratorProof of 
+    Nothing -> throwIO Unauthorized
+    Just proof -> fireMissiles proof
 ```
 
 The domain of the function is now restricted in such a way that you are only 
@@ -564,8 +571,8 @@ Yes. The original issues were:
 How they were fixed?
 
 1. Unsafety 
-   - It's no longer possible to perform a protected function without providing 
-     proof of authorization (as long as the domain of the protected function is 
+   - It's no longer possible to run a protected function without providing
+     proof of authorization (as long as the domain of the protected function is
      restricted).
 2. Redundancy 
    - Proof of authorization can be obtained once and reused as many times as 
