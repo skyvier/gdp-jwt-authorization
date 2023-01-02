@@ -93,11 +93,13 @@ function that can only be run if the user
 ### This repository 
 
 The code in this repository is a working PoC of the techniques described 
-in the rest of this document.
+in the proposed solution.
 
 It implements a program that allows a user to "delete an application" if the
 JWT provided by the user tells that the user is an administrator according to
 Azure or AWS.
+
+The compiler forces the developer to provide a proof of authorization.
 
 ### Naive solution 
 
