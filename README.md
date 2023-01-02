@@ -491,7 +491,7 @@ azureAdmin ::
   Proof (
     (token `SignedBy` "azure" && (ClaimsOf token) `HasRole` "administrator")
     -->
-    (IsAdministrator token)
+    (IsAzureAdministrator token)
   )
 azureAdmin = axiom
 ```
