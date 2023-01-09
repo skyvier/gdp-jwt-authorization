@@ -12,14 +12,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Authorization.HasRole (Role(..), RoleError, HasRole, hasRole, withRole) where
+module Validation.Azure.HasRole
+  ( HasAzureRole
+  , hasAzureRole
+  ) where
 
 import Data.Aeson
 import Data.Proxy
 import qualified Data.Map as M
 
 import Control.Lens hiding ((...))
-import Control.Monad.IO.Class
 import Control.Exception
 
 import GDP
@@ -29,32 +31,23 @@ import Crypto.JWT
 import GHC.TypeLits
 import GHC.Generics
 
+import Validation.IssuedBy
+
 newtype Role = Role { unRole :: String }
   deriving stock (Eq, Show, Generic)
   deriving newtype (ToJSON, FromJSON)
 
-data HasRole claims (jwtRole :: Symbol)
+data HasAzureRole claims (jwtRole :: Symbol)
 
 data RoleError = DoesNotHaveRole
   deriving stock (Show, Eq)
   deriving anyclass (Exception)
 
-withRole
-  :: forall roleName claims r m. (KnownSymbol roleName, Monad m, MonadIO m)
-  => (ClaimsSet ~~ claims)
-  -> (Proof (claims `HasRole` roleName) -> m r)
-  -> m r
-withRole x callback = do
-  let mProof = hasRole @roleName x
-  case mProof of
-    Nothing -> liftIO $ throwIO DoesNotHaveRole
-    Just proof -> callback proof
-
-hasRole
-  :: forall roleName claims. KnownSymbol roleName
-  => (ClaimsSet ~~ claims)
-  -> Maybe (Proof (claims `HasRole` roleName))
-hasRole c =
+hasAzureRole
+  :: forall roleName token. KnownSymbol roleName
+  => (ClaimsSet ~~ ClaimsOf token ::: (token `IssuedBy` "azure"))
+  -> Maybe (Proof (ClaimsOf token  `HasAzureRole` roleName))
+hasAzureRole c =
   let necessaryRole = Role $ symbolVal $ Proxy @roleName
       mRoles = getRoles $ the c
       hasNecessaryRole = maybe False (elem necessaryRole) mRoles

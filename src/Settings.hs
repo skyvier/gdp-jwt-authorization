@@ -16,7 +16,7 @@ import GHC.Generics
 
 data Settings = Settings
   { azureJwtSettings :: JWTSettings
-  , awsJwtSettings :: JWTSettings
+  , oktaJwtSettings :: JWTSettings
   } deriving stock (Generic)
 
 data JWTSettings = JWTSettings
@@ -30,5 +30,5 @@ class HasSettings (jwtSource :: Symbol) s where
 instance HasSettings "azure" Settings where
   settings _ = azureJwtSettings
 
-instance HasSettings "aws" Settings where
-  settings _ = awsJwtSettings
+instance HasSettings "okta" Settings where
+  settings _ = oktaJwtSettings

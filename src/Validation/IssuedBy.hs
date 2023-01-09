@@ -9,11 +9,10 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Validation.SignedWith
-  ( SignedBy
+module Validation.IssuedBy
+  ( IssuedBy
   , ClaimsOf
   , getClaimsOf
-  , withClaimsSignedBy
   ) where
 
 import Settings
@@ -32,7 +31,7 @@ import Crypto.JWT
 
 import GHC.TypeLits
 
-data SignedBy token (source :: Symbol)
+data IssuedBy token (source :: Symbol)
 
 newtype ClaimsOf token = ClaimsOf Defn
 
@@ -45,7 +44,7 @@ signedBy
       ( KnownSymbol source, Monad m, MonadTime m
       , MonadReader s m, HasSettings source s)
   => (SignedJWT ~~ token)
-  -> m (Either JWTError (ClaimsSet ~~ ClaimsOf token, Proof (token `SignedBy` source)))
+  -> m (Either JWTError (ClaimsSet ~~ ClaimsOf token, Proof (token `IssuedBy` source)))
 signedBy token = runExceptT $ do
   let getter = settings $ Proxy @source
   currentSettings <- asks getter
@@ -59,22 +58,10 @@ getClaimsOf
       ( KnownSymbol source, Monad m, MonadTime m
       , MonadReader s m, HasSettings source s)
   => (SignedJWT ~~ token)
-  -> m (Maybe (ClaimsSet ~~ ClaimsOf token ::: (token `SignedBy` source)))
+  -> m (Maybe (ClaimsSet ~~ ClaimsOf token ::: (token `IssuedBy` source)))
 getClaimsOf token = do
   eClaims <- signedBy @source token
   case eClaims of
     Left _ -> return Nothing
     Right (namedClaims, proofOfSignature) ->
       return $ Just (namedClaims ...proofOfSignature)
-
-withClaimsSignedBy
-  :: forall source token m s r. (KnownSymbol source, MonadIO m, MonadTime m, MonadReader s m, HasSettings source s)
-  => (SignedJWT ~~ token)
-  -> ((ClaimsSet ~~ ClaimsOf token, Proof (token `SignedBy` source)) -> m r)
-  -> m r
-withClaimsSignedBy token callback = do
-  eClaims <- signedBy @source token
-  case eClaims of
-    Left err -> liftIO $ throwIO $ ValidationError err
-    Right (namedClaims, proofOfSignature) ->
-      callback (namedClaims, proofOfSignature)

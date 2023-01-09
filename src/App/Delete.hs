@@ -2,49 +2,54 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeOperators #-}
 
 module App.Delete where
 
 import Settings
-import Validation.SignedWith
-import Authorization.HasRole
-import Authorization.Delete
+import Authorization.Axioms
+
+import Validation.IssuedBy
+import Validation.Azure.HasRole
 
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 import Control.Monad.Time
 
 import GDP
 
 import Crypto.JWT
 
-deleteApplication
-  :: ( Monad m, MonadTime m
-     , MonadReader s m, HasSettings "azure" s, HasSettings "aws" s, MonadIO m
-     )
-  => SignedJWT
+deleteApplicationSafe
+  :: MonadIO m
+  => Proof (CanDeleteApps token)
   -> m ()
-deleteApplication jwt =
-  name jwt $ \namedJwt -> do
-    mProof <- canDeleteApplication namedJwt
-    case mProof of
-      Just proof -> deleteApplicationSafe proof
-      Nothing -> liftIO $ putStrLn "Unauthorized"
+deleteApplicationSafe _ = liftIO $ putStrLn "Done"
 
-deleteApplicationAzure
+deleteApplication
   :: ( Monad m, MonadTime m
      , MonadReader s m, HasSettings "azure" s, MonadIO m
      )
   => SignedJWT
   -> m ()
-deleteApplicationAzure jwt =
-  name jwt $ \namedJwt ->
-    withClaimsSignedBy @"azure" namedJwt $ \(namedClaims, proofOfSignature) ->
-      withRole @"administrator" namedClaims $ \proofOfRole ->
-        let proof = buildProofAzure proofOfSignature proofOfRole
-        in deleteApplicationSafe proof
+deleteApplication jwt =
+  name jwt $ \namedJwt -> do
+    mProof <- buildAuthorizationProof namedJwt
+    case mProof of
+      Just proof -> deleteApplicationSafe proof
+      Nothing -> liftIO $ putStrLn "Unauthorized"
 
-deleteApplicationSafe
-  :: MonadIO m
-  => Proof (CanDeleteApplication token)
-  -> m ()
-deleteApplicationSafe _ = liftIO $ putStrLn "Done"
+buildAuthorizationProof
+  :: ( Monad m, MonadTime m
+     , MonadReader s m, HasSettings "azure" s, MonadIO m
+     )
+  => SignedJWT ~~ token
+  -> m (Maybe (Proof (CanDeleteApps token)))
+buildAuthorizationProof jwt = runMaybeT $ do
+  claims <- MaybeT $ getClaimsOf @"azure" jwt
+  proofOfRole <- MaybeT $ pure $ hasAzureRole @"administrator" claims
+  let proofOfSignature = conjure claims
+      proofOfAuthorization =
+        (proofOfSignature `introAnd` proofOfRole)
+          `elimImpl` canDeleteApps
+  return proofOfAuthorization

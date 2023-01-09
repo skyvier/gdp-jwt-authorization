@@ -38,10 +38,10 @@ interactiveTest = do
 getTestSettings :: IO Settings
 getTestSettings = do
   azureSettings <- getAzureSettings
-  awsSettings <- getAwsSettings
+  oktaSettings <- getAwsSettings
   return $ Settings
     { azureJwtSettings = azureSettings
-    , awsJwtSettings = awsSettings
+    , oktaJwtSettings = oktaSettings
     }
 
 getAwsSettings :: IO JWTSettings
